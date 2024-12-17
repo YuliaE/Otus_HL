@@ -1,8 +1,6 @@
 package main
 
 import (
-	//"backend/storage"
-
 	"strings"
 
 	"database/sql" // add this
@@ -20,18 +18,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// const (
-// 	host     = "localhost"
-// 	port     = 5432
-// 	user     = "user"
-// 	password = "user"
-// 	dbname   = "otus_db"
-// )
-
 type userSN struct {
 	Firstname  string `json:"firstname"`
 	Secondname string `json:"secondname"`
-	Birthdate  string `json:"birthdate"`
+	Age        int    `json:"age"`
 	Biography  string `json:"biography"`
 	City       string `json:"city"`
 	Login      string `json:"login"`
@@ -47,15 +37,23 @@ type getUser struct {
 	User_id     string `json:"id"`
 	First_name  string `json:"firstname"`
 	Second_name string `json:"secondname"`
-	Birthdate   string `json:"birthdate"`
+	Age         string `json:"Age"`
 	Biography   string `json:"biography"`
+	City        string `json:"city"`
+}
+
+type getUserSearch struct {
+	User_id     string `json:"id"`
+	First_name  string `json:"firstname"`
+	Second_name string `json:"secondname"`
+	Age         int    `json:"age"`
 	City        string `json:"city"`
 }
 
 var jwtKey = []byte("my_secret_key")
 
 func InitDB() *sql.DB {
-
+	// Connection to master
 	var db *sql.DB
 
 	err := godotenv.Load()
@@ -84,6 +82,36 @@ func InitDB() *sql.DB {
 	return db
 }
 
+func InitDBRep() *sql.DB {
+	// Connection to master
+	var db *sql.DB
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Panic("Error loading .env file")
+	}
+
+	dbHost := os.Getenv("DB_HOST_REP")
+	dbPort := os.Getenv("DB_PORT_REP")
+	dbUser := os.Getenv("DB_USER_REP")
+	dbPass := os.Getenv("DB_PASSWORD_REP")
+	dbName := os.Getenv("DB_NAME_REP")
+
+	db, err = sql.Open("postgres", fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", dbHost, dbUser, dbPass, dbName, dbPort))
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	err = db.Ping()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	fmt.Println("Successfully connected to database")
+	return db
+}
+
 func main() {
 
 	router := gin.Default()
@@ -94,8 +122,33 @@ func main() {
 	}
 	router.POST("/users/register", createUser)
 	router.GET("/login", loginUser)
+	router.GET("/users/search", userSearch)
 
 	router.Run(":3000")
+}
+func userSearch(c *gin.Context) {
+
+	searchString := "%" + c.Query("search") + "%"
+	fmt.Println(searchString)
+	db := InitDBRep()
+	defer db.Close()
+
+	rows, err := db.Query("SELECT user_id, first_name, second_name, age, city FROM users WHERE first_name like $1 order by user_id", searchString)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer rows.Close()
+
+	var userResult []getUserSearch
+	for rows.Next() {
+		var a getUserSearch
+		err := rows.Scan(&a.User_id, &a.First_name, &a.Second_name, &a.Age, &a.City)
+		if err != nil {
+			log.Panic(err)
+		}
+		userResult = append(userResult, a)
+	}
+	c.IndentedJSON(http.StatusOK, userResult)
 }
 
 func getUserByID(c *gin.Context) {
@@ -105,10 +158,10 @@ func getUserByID(c *gin.Context) {
 		log.Panic(err)
 	}
 	fmt.Println(UserId)
-	db := InitDB()
+	db := InitDBRep()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT user_id, first_name, second_name, birthdate, biography, city FROM users WHERE user_id = $1", UserId)
+	rows, err := db.Query("SELECT user_id, first_name, second_name, age, biography, city FROM users WHERE user_id = $1", UserId)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -117,7 +170,7 @@ func getUserByID(c *gin.Context) {
 	var userResult []getUser
 	for rows.Next() {
 		var a getUser
-		err := rows.Scan(&a.User_id, &a.First_name, &a.Second_name, &a.Birthdate, &a.Biography, &a.City)
+		err := rows.Scan(&a.User_id, &a.First_name, &a.Second_name, &a.Age, &a.Biography, &a.City)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -138,24 +191,14 @@ func createUser(c *gin.Context) {
 		return
 	}
 
-	str := newUser.Birthdate
-	layout := "2006-01-02"
-	t, err := time.Parse(layout, str)
-	if err != nil {
-		fmt.Println("Error parsing date/time string:", err)
-		return
-	} else {
-		fmt.Println("Parsed time:", t)
-	}
-
-	stmt, err := db.Prepare("INSERT INTO users (user_id, first_name, second_name, birthdate, biography, city) VALUES ($1, $2, $3, $4, $5, $6)")
+	stmt, err := db.Prepare("INSERT INTO users (user_id, first_name, second_name, age, biography, city) VALUES ($1, $2, $3, $4, $5, $6)")
 	if err != nil {
 		log.Panic(err)
 		return
 	}
 	defer stmt.Close()
 
-	if _, err := stmt.Exec(UserId, newUser.Firstname, newUser.Secondname, t, newUser.Biography, newUser.City); err != nil {
+	if _, err := stmt.Exec(UserId, newUser.Firstname, newUser.Secondname, newUser.Age, newUser.Biography, newUser.City); err != nil {
 		log.Panic(err)
 		return
 	}

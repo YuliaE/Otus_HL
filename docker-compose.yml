@@ -1,6 +1,7 @@
 ﻿volumes:
     pgdata:
-      external: true
+    pgdataRep1:
+    pgdataRep2:
 
 services:
   backend:
@@ -19,10 +20,10 @@ services:
       - .:/usr/src/app
     command: go run ./main.go -b 0.0.0.0
     networks:
-      - postgres
+      - otus_net
 
-  postgres:
-    container_name: pg
+  postgres-master:
+    container_name: pgmaster
     image: postgres:17
     environment:
       POSTGRES_DB: "otus_db"
@@ -38,7 +39,52 @@ services:
       #- ./volumes/Database/data:/var/lib/postgresql/data
       - ./volumes/Database/backups:/backups # Папка для бекапов
     networks:
-      - postgres
+      - otus_net
+
+  postgres-standby1:
+    container_name: pgslave
+    image: postgres:17
+    environment:
+      POSTGRES_DB: "otus_db"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "user"
+    mem_limit: 512m
+    ports:
+      - 5433:5432
+    restart: always
+    volumes:
+      - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
+      - pgdataRep1:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
+      #- ./volumes/Database/data:/var/lib/postgresql/data
+      - ./volumes/Database/backups:/backups # Папка для бекапов
+    networks:
+      - otus_net
+
+  postgres-standby2:
+    container_name: pgasyncslave
+    image: postgres:17
+    environment:
+      POSTGRES_DB: "otus_db"
+      POSTGRES_USER: "user"
+      POSTGRES_PASSWORD: "user"
+    mem_limit: 512m
+    ports:
+      - 5434:5432
+    restart: always
+    volumes:
+      - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
+      - pgdataRep2:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
+      #- ./volumes/Database/data:/var/lib/postgresql/data
+      - ./volumes/Database/backups:/backups # Папка для бекапов
+    networks:
+      - otus_net
+
+  load_csv:   
+    build: ./LoadCSV   
+    depends_on: 
+      - postgres-master
+    networks:
+      - otus_net
 
   proxy:
     image: nginx
@@ -52,7 +98,7 @@ services:
     depends_on: 
       - backend
     networks:
-      - postgres
+      - otus_net
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -63,8 +109,8 @@ services:
     ports: 
       - "8888:80"
     networks:
-      - postgres  
+      - otus_net 
 networks:
-  postgres:
+  otus_net:
     driver: bridge
 

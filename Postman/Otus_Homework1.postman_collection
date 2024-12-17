@@ -27,7 +27,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "    {\r\n        \"firstname\": \"Blue Train\",\r\n        \"secondname\": \"John Coltrane\",\r\n        \"birthdate\": \"2011-08-08\",\r\n        \"biography\": \"Diving\",   \r\n        \"city\": \"Moscow\",\r\n        \"password\": \"111\"\r\n    }",
+					"raw": "    {\r\n        \"firstname\": \"Repl1\",\r\n        \"secondname\": \"John Blue\",\r\n        \"age\": 54,\r\n        \"biography\": \"Diving\",   \r\n        \"city\": \"Moscow\",\r\n        \"login\": \"testr1232321\",\r\n        \"password\": \"pass1\"\r\n    }",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -35,11 +35,11 @@
 					}
 				},
 				"url": {
-					"raw": "localhost:3000/users/register",
+					"raw": "localhost:8080/users/register",
 					"host": [
 						"localhost"
 					],
-					"port": "3000",
+					"port": "8080",
 					"path": [
 						"users",
 						"register"
@@ -51,36 +51,12 @@
 		{
 			"name": "GetUserById",
 			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "localhost:3000/users/e99fb0dd-b2d6-4dc7-b034-2e677205ba47",
-					"host": [
-						"localhost"
-					],
-					"port": "3000",
-					"path": [
-						"users",
-						"e99fb0dd-b2d6-4dc7-b034-2e677205ba47"
-					]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "login",
-			"request": {
 				"auth": {
-					"type": "basic",
-					"basic": [
+					"type": "bearer",
+					"bearer": [
 						{
-							"key": "password",
-							"value": "secret",
-							"type": "string"
-						},
-						{
-							"key": "username",
-							"value": "user",
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzQzOTMzMjB9.S4xXCu6jf4VoUQINSKkCTdk2L2E_X202JAnzhEXLp-o",
 							"type": "string"
 						}
 					]
@@ -88,14 +64,83 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "http://localhost:3000/login",
+					"raw": "localhost:8080/users/a6742a05-c87a-4083-960b-5749e85b5c1f",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"users",
+						"a6742a05-c87a-4083-960b-5749e85b5c1f"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "username",
+							"value": "test112",
+							"type": "string"
+						},
+						{
+							"key": "password",
+							"value": "pass1",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/login",
 					"protocol": "http",
 					"host": [
 						"localhost"
 					],
-					"port": "3000",
+					"port": "8080",
 					"path": [
 						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "UserSearch",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzM1MzU0MzN9.QagD_UGNKJB99jC2_SCXtS_wXmUcfl_1z42YCWVY-Fs",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/users/search?search=Bl",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"users",
+						"search"
+					],
+					"query": [
+						{
+							"key": "search",
+							"value": "Bl"
+						}
 					]
 				}
 			},
