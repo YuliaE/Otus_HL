@@ -19,6 +19,12 @@ CREATE TABLE IF NOT EXISTS public.accounts
     CONSTRAINT accounts_pkey PRIMARY KEY (user_id)
 );
 
+CREATE TABLE IF NOT EXISTS public.posts
+(
+    post_id BIGSERIAL PRIMARY KEY,
+    post varchar(3000)
+);
+
 INSERT INTO users VALUES
 ('550e8400-e29b-41d4-a716-446655440000', 'Ivanov', 'Ivan', '200', 'Reading', 'Saint Petersburg');
 

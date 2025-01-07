@@ -7,7 +7,7 @@
 	},
 	"item": [
 		{
-			"name": "Create",
+			"name": "CreateUser",
 			"event": [
 				{
 					"listen": "test",
@@ -27,7 +27,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "    {\r\n        \"firstname\": \"Repl1\",\r\n        \"secondname\": \"John Blue\",\r\n        \"age\": 54,\r\n        \"biography\": \"Diving\",   \r\n        \"city\": \"Moscow\",\r\n        \"login\": \"testr1232321\",\r\n        \"password\": \"pass1\"\r\n    }",
+					"raw": "    {\r\n        \"firstname\": \"Repl1\",\r\n        \"secondname\": \"John Blue\",\r\n        \"age\": 54,\r\n        \"biography\": \"Diving\",   \r\n        \"city\": \"Moscow\",\r\n        \"login\": \"testo759\",\r\n        \"password\": \"pass1\"\r\n    }",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -127,7 +127,7 @@
 				"method": "GET",
 				"header": [],
 				"url": {
-					"raw": "localhost:8080/users/search?search=Bl",
+					"raw": "localhost:8080/users/search?search=ар",
 					"host": [
 						"localhost"
 					],
@@ -139,7 +139,60 @@
 					"query": [
 						{
 							"key": "search",
-							"value": "Bl"
+							"value": "ар"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "PostCreate",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"posttext\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:3000/post/create",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"post",
+						"create"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "GetFeed",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/post/feed?id=8333",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"post",
+						"feed"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "8333"
 						}
 					]
 				}

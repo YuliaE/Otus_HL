@@ -22,8 +22,8 @@ services:
     networks:
       - otus_net
 
-  postgres-master:
-    container_name: pgmaster
+  pg:
+    container_name: pg
     image: postgres:17
     environment:
       POSTGRES_DB: "otus_db"
@@ -36,53 +36,52 @@ services:
     volumes:
       - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
       - pgdata:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
-      #- ./volumes/Database/data:/var/lib/postgresql/data
       - ./volumes/Database/backups:/backups # Папка для бекапов
     networks:
       - otus_net
 
-  postgres-standby1:
-    container_name: pgslave
-    image: postgres:17
-    environment:
-      POSTGRES_DB: "otus_db"
-      POSTGRES_USER: "user"
-      POSTGRES_PASSWORD: "user"
-    mem_limit: 512m
-    ports:
-      - 5433:5432
-    restart: always
-    volumes:
-      - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
-      - pgdataRep1:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
-      #- ./volumes/Database/data:/var/lib/postgresql/data
-      - ./volumes/Database/backups:/backups # Папка для бекапов
-    networks:
-      - otus_net
+  # postgres-standby1:
+  #   container_name: pgslave
+  #   image: postgres:17
+  #   environment:
+  #     POSTGRES_DB: "otus_db"
+  #     POSTGRES_USER: "user"
+  #     POSTGRES_PASSWORD: "user"
+  #   mem_limit: 512m
+  #   ports:
+  #     - 5433:5432
+  #   restart: always
+  #   volumes:
+  #     - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
+  #     - pgdataRep1:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
+  #     #- ./volumes/Database/data:/var/lib/postgresql/data
+  #     - ./volumes/Database/backups:/backups # Папка для бекапов
+  #   networks:
+  #     - otus_net
 
-  postgres-standby2:
-    container_name: pgasyncslave
-    image: postgres:17
-    environment:
-      POSTGRES_DB: "otus_db"
-      POSTGRES_USER: "user"
-      POSTGRES_PASSWORD: "user"
-    mem_limit: 512m
-    ports:
-      - 5434:5432
-    restart: always
-    volumes:
-      - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
-      - pgdataRep2:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
-      #- ./volumes/Database/data:/var/lib/postgresql/data
-      - ./volumes/Database/backups:/backups # Папка для бекапов
-    networks:
-      - otus_net
+  # postgres-standby2:
+  #   container_name: pgasyncslave
+  #   image: postgres:17
+  #   environment:
+  #     POSTGRES_DB: "otus_db"
+  #     POSTGRES_USER: "user"
+  #     POSTGRES_PASSWORD: "user"
+  #   mem_limit: 512m
+  #   ports:
+  #     - 5434:5432
+  #   restart: always
+  #   volumes:
+  #     - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
+  #     - pgdataRep2:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
+  #     #- ./volumes/Database/data:/var/lib/postgresql/data
+  #     - ./volumes/Database/backups:/backups # Папка для бекапов
+  #   networks:
+  #     - otus_net
 
   load_csv:   
     build: ./LoadCSV   
     depends_on: 
-      - postgres-master
+      - pg
     networks:
       - otus_net
 
@@ -110,6 +109,7 @@ services:
       - "8888:80"
     networks:
       - otus_net 
+
 networks:
   otus_net:
     driver: bridge
