@@ -3,11 +3,13 @@
 Запрос для создания таблиц лежит в папке `Postgres`.
 Коллекция вызовов для Postman лежит в папке `Postman`.
 
-0. Все состояние базы данных хранится в папке `volumes`. Для того, чтобы запустить с нуля и заново создать базу данных нужно удалить папку `rm -rf volumes`.
 1. Запускаем базу данных и API командой `docker-compose up -d`.
-2. Ждем когда Postgres запустится, перезагрузится, создадутся таблицы.
-3. Открываем Postman, создаем новый пост. Запрос `PostCreate` localhost:8080/post/create. Получаем PostId созданного поста.
-4. Создаём запрос в Postman c PostID из пункта 3 localhost:8080/post/feed?id=8393. Получаем ответ с постом из кэша. 
-5. Создаём запрос в Postman c PostID 7500 (изначально в кеш загружается 1000 самых свежих записей по ID, в начальной загрузке это интервал 7393-8392)  localhost:8080/post/feed?id=7500. Получаем ответ с постом из кэша.
-6. Создаём запрос в Postman c PostID 6500 (ID не попал в кеш) localhost:8080/post/feed?id=6500. Получаем ответ с постом из БД.
-7. Ждём 5 минут и кеш очищается по времени
+2. Ждем когда Citus запустится, перезагрузится, создадутся таблицы.
+3. Запускаем otus_hl_master `docker container start otus_hl_master`
+4. Делаем таблицу dialogs шардированной  для чего заходим в консоль контейнера коррдинатора `docker exec -it otus_hl_master psql -U user`. В консоли `SELECT create_distributed_table('dialogs', 'dialog_id');` 
+5. Проверяем запущенные ноды `SELECT master_get_active_worker_nodes();`. Если есть otus_hl_worker1, otus_hl_worker2 - всё хорошо, иначе `docker-compose down` и заново запускаем пункт 1 и далее
+6. Открываем Postman, создаем новый пост. Запрос `DialogSend` localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/send
+7. Создаём запрос в Postman `DialogList`c userID из пункта 6. localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/list. Получаем ответ c диалогами
+
+8. Для ребалансировки без остановки можно применить SELECT citus_rebalance_start(); 
+Starting in version 11.0, Citus Community edition now supports non-blocking reads and writes during rebalancing.

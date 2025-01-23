@@ -1,12 +1,9 @@
 package main
 
 import (
-	//"src/cache_time"
+	"db/db"
 	"strconv"
 	"strings"
-
-	//memorycache "github.com/maxchagin/go-memorycache-example"
-	"github.com/patrickmn/go-cache"
 
 	"database/sql" // add this
 	"fmt"
@@ -18,7 +15,6 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -42,6 +38,11 @@ type newPost struct {
 	Post string `json:"posttext"`
 }
 
+type newDialog struct {
+	User_to     string `json:"userto"`
+	Dialog_Text string `json:"dialogtext"`
+}
+
 type getUser struct {
 	User_id     string `json:"id"`
 	First_name  string `json:"firstname"`
@@ -59,6 +60,12 @@ type getUserSearch struct {
 	City        string `json:"city"`
 }
 
+type getDialog struct {
+	Dialog_id   string `json:"id"`
+	User_from   string `json:"userfrom"`
+	User_to     string `json:"userto"`
+	Dialog_text string `json:"text"`
+}
 type Post struct {
 	PostId int
 	Post   string
@@ -66,45 +73,8 @@ type Post struct {
 
 // Global variables
 var jwtKey = []byte("my_secret_key")
-var defaultExpiration = 5 * time.Minute
-var cleanupInterval = 10 * time.Minute //cache time
-var cacheOtus *cache.Cache             //variable for cache
-
-func InitDB() *sql.DB {
-	// Connection to master DB
-	var db *sql.DB
-
-	err := godotenv.Load()
-	if err != nil {
-		log.Panic("Error loading .env file")
-	}
-
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASSWORD")
-	dbName := os.Getenv("DB_NAME")
-
-	db, err = sql.Open("postgres", fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", dbHost, dbUser, dbPass, dbName, dbPort))
-
-	if err != nil {
-		panic(err.Error())
-	}
-
-	err = db.Ping()
-	if err != nil {
-		panic(err.Error())
-	}
-
-	fmt.Println("Successfully connected to database")
-	return db
-}
 
 func main() {
-
-	cacheOtus = cache.New(defaultExpiration, cleanupInterval)
-	//Add 1000 post from DB in cache
-	InitCache(cacheOtus)
 
 	router := gin.Default()
 	users := router.Group("/users")
@@ -117,54 +87,86 @@ func main() {
 	router.GET("/users/search", userSearch)
 	router.POST("/post/create", postCreate)
 	router.GET("/post/feed", postFeed)
+	router.POST("/dialog/:userId/send", dialogSend)
+	router.GET("/dialog/:userId/list", dialogList)
 	router.Run(":3000")
+}
+
+func dialogSend(c *gin.Context) {
+
+	var newDialog newDialog
+	var dialogId int
+
+	userFrom := c.Param("userId")
+
+	db := db.InitDB()
+	defer db.Close()
+	if err := c.BindJSON(&newDialog); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		return
+	}
+
+	stmt, err := db.Prepare("INSERT INTO dialogs(dialog_text, user_to, user_from) VALUES ($1, $2, $3) RETURNING dialog_id")
+	if err != nil {
+		log.Panic(err)
+		return
+	}
+	defer stmt.Close()
+
+	err = stmt.QueryRow(newDialog.Dialog_Text, newDialog.User_to, userFrom).Scan(&dialogId)
+	if err != nil {
+		log.Panic(err)
+		return
+	}
+
+	c.IndentedJSON(http.StatusCreated, gin.H{"Dialog created": dialogId})
+}
+
+func dialogList(c *gin.Context) {
+
+	userId := c.Param("userId")
+	db := db.InitDB()
+	defer db.Close()
+
+	rows, err := db.Query("SELECT dialog_id, user_from, user_to, dialog_text FROM dialogs WHERE user_to = $1 OR user_from = $1 ORDER BY dialog_id DESC", userId)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	defer rows.Close()
+
+	var dialogResult []getDialog
+	for rows.Next() {
+		var a getDialog
+		err := rows.Scan(&a.Dialog_id, &a.User_from, &a.User_to, &a.Dialog_text)
+		if err != nil {
+			log.Panic(err)
+		}
+		dialogResult = append(dialogResult, a)
+	}
+	c.IndentedJSON(http.StatusOK, dialogResult)
 }
 
 func postFeed(c *gin.Context) {
 	var postGet Post
 
 	myKey := c.Query("id")
-	post, err := cacheOtus.Get(myKey)
 
-	if !err {
-		db := InitDB()
-		defer db.Close()
-
-		num, err := strconv.Atoi(myKey)
-		if err != nil {
-			fmt.Println("Error converting string to int:", err)
-		}
-
-		if err := db.QueryRow("SELECT post_id, post FROM posts WHERE post_id = $1", num).Scan(&postGet.PostId, &postGet.Post); err != nil {
-			if err == sql.ErrNoRows {
-				c.IndentedJSON(http.StatusNotFound, gin.H{"Post not found": myKey})
-			}
-			c.IndentedJSON(http.StatusNotFound, gin.H{"Error": myKey})
-		} else {
-			c.IndentedJSON(http.StatusOK, gin.H{"Post from DB": postGet.Post})
-		}
-	} else {
-		c.IndentedJSON(http.StatusOK, gin.H{"Post from cache": post})
-	}
-}
-
-func InitCache(c *cache.Cache) {
-
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT post_id, post FROM posts ORDER BY post_id DESC LIMIT 1000")
+	num, err := strconv.Atoi(myKey)
 	if err != nil {
-		log.Panic(err)
+		fmt.Println("Error converting string to int:", err)
 	}
-	defer rows.Close()
-	var a Post
-	for rows.Next() {
-		err := rows.Scan(&a.PostId, &a.Post)
-		if err != nil {
-			log.Panic(err)
+
+	if err := db.QueryRow("SELECT post_id, post FROM posts WHERE post_id = $1", num).Scan(&postGet.PostId, &postGet.Post); err != nil {
+		if err == sql.ErrNoRows {
+			c.IndentedJSON(http.StatusNotFound, gin.H{"Post not found": myKey})
 		}
-		c.Set(fmt.Sprint(a.PostId), a.Post, 5*time.Minute)
+		c.IndentedJSON(http.StatusNotFound, gin.H{"Error": myKey})
+	} else {
+		c.IndentedJSON(http.StatusOK, gin.H{"Post from DB": postGet.Post})
 	}
 }
 
@@ -172,7 +174,7 @@ func userSearch(c *gin.Context) {
 
 	searchString := "%" + c.Query("search") + "%"
 	fmt.Println(searchString)
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 
 	rows, err := db.Query("SELECT user_id, first_name, second_name, age, city FROM users WHERE first_name like $1 order by user_id", searchString)
@@ -200,7 +202,7 @@ func getUserByID(c *gin.Context) {
 		log.Panic(err)
 	}
 	fmt.Println(UserId)
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 
 	rows, err := db.Query("SELECT user_id, first_name, second_name, age, biography, city FROM users WHERE user_id = $1", UserId)
@@ -226,7 +228,7 @@ func createUser(c *gin.Context) {
 	var newUser userSN
 
 	UserId := uuid.New()
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 	if err := c.BindJSON(&newUser); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
@@ -266,7 +268,7 @@ func postCreate(c *gin.Context) {
 	var newPost newPost
 	var postId int
 
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 	if err := c.BindJSON(&newPost); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
@@ -286,9 +288,6 @@ func postCreate(c *gin.Context) {
 		return
 	}
 
-	//Add new post in cache
-	cacheOtus.Set(fmt.Sprint(postId), newPost.Post, defaultExpiration)
-
 	c.IndentedJSON(http.StatusCreated, gin.H{"Post created": postId})
 }
 
@@ -297,7 +296,7 @@ func loginUser(c *gin.Context) {
 	user, pass, hasAuth := c.Request.BasicAuth()
 	fmt.Fprintln(os.Stdout, "{0} {1}", pass, hasAuth)
 
-	db := InitDB()
+	db := db.InitDB()
 	defer db.Close()
 
 	var userPassword string

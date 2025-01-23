@@ -5,6 +5,6 @@ echo "Sleeping for 40 seconds…"
 sleep 40
 
 echo "Start load CSV"
-psql postgresql://user:user@pg:5432/otus_db  -a -f "/src/my_script.sql"
+psql postgresql://user:user@otus_hl_master:5432/user  -a -f "/src/my_script.sql"
 
 echo "End load CSV"

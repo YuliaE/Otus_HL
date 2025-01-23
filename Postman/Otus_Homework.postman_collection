@@ -175,6 +175,35 @@
 			"response": []
 		},
 		{
+			"name": "DialogSend",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"userto\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\",\r\n    \"dialogtext\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:3000/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/send",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"dialog",
+						"ed40b849-fd72-4601-afdb-00d1031beb9c",
+						"send"
+					]
+				}
+			},
+			"response": []
+		},
+		{
 			"name": "GetFeed",
 			"request": {
 				"method": "GET",
@@ -194,6 +223,26 @@
 							"key": "id",
 							"value": "8333"
 						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "DialogList",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/list",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"dialog",
+						"ed40b849-fd72-4601-afdb-00d1031beb9c",
+						"list"
 					]
 				}
 			},
