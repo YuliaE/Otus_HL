@@ -1,11 +1,4 @@
---CREATE ROLE replicator WITH LOGIN replication PASSWORD 'pass';
-CREATE DATABASE otus_db;
-
-CREATE EXTENSION citus;
-SELECT run_command_on_workers('CREATE DATABASE otus_db;');
-SELECT citus_set_coordinator_host('otus_hl_master', 5432);
--- SELECT * from master_add_node('otus_hl_worker1', 5432);
--- SELECT * from master_add_node('otus_hl_worker2', 5432);
+--CREATE DATABASE otus_db;
 
 CREATE TABLE IF NOT EXISTS  users (
     user_id     varchar(50) PRIMARY KEY NOT NULL,
@@ -28,6 +21,7 @@ CREATE TABLE IF NOT EXISTS accounts
 CREATE TABLE IF NOT EXISTS posts
 (
     post_id BIGSERIAL PRIMARY KEY,
+    user_id varchar(50),
     post varchar(3000)
 );
 
@@ -39,20 +33,30 @@ CREATE TABLE IF NOT EXISTS dialogs
     user_from   varchar(50) NOT NULL
 );
 
-insert into dialogs(dialog_text, user_to, user_from)
-select
-    left(md5(i::text), 20),
-    md5(random()::text),
-    md5(random()::text)
-from generate_series(1, 1000000) s(i);
+CREATE TABLE IF NOT EXISTS friendships
+(
+    friendship_id   BIGSERIAL PRIMARY KEY,
+    user_id1    varchar(50) NOT NULL REFERENCES users (user_id),
+    user_id2   varchar(50) NOT NULL REFERENCES users (user_id)
+);
 
+-- insert into dialogs(dialog_text, user_to, user_from)
+-- select
+--     left(md5(i::text), 20),
+--     md5(random()::text),
+--     md5(random()::text)
+-- from generate_series(1, 1000000) s(i);
 
-SELECT create_distributed_table('dialogs', 'dialog_id');
 
 INSERT INTO users VALUES
 ('550e8400-e29b-41d4-a716-446655440000', 'Ivanov', 'Ivan', '200', 'Reading', 'Saint Petersburg');
 INSERT INTO users VALUES
 ('ed40b849-fd72-4601-afdb-00d1031beb9c', 'Smirnov', 'Ivan', '200', 'Reading', 'Saint Petersburg');
+INSERT INTO users VALUES
+('aa40b849-fd72-4601-afdb-00d1031beb9c', 'Petrov', 'Ivan', '200', 'Reading', 'Saint Petersburg');
+
+INSERT INTO friendships(user_id1, user_id2) VALUES
+('550e8400-e29b-41d4-a716-446655440000','ed40b849-fd72-4601-afdb-00d1031beb9c');
 
 INSERT INTO accounts VALUES
 ('550e8400-e29b-41d4-a716-446655440000', 'ivan2000', 'ivan2000');

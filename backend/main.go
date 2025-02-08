@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"db/db"
 	"strconv"
 	"strings"
@@ -15,7 +16,9 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -35,7 +38,8 @@ type newLoginUSer struct {
 }
 
 type newPost struct {
-	Post string `json:"posttext"`
+	User_id string `json:"id"`
+	Post    string `json:"posttext"`
 }
 
 type newDialog struct {
@@ -73,6 +77,11 @@ type Post struct {
 
 // Global variables
 var jwtKey = []byte("my_secret_key")
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 func main() {
 
@@ -89,7 +98,76 @@ func main() {
 	router.GET("/post/feed", postFeed)
 	router.POST("/dialog/:userId/send", dialogSend)
 	router.GET("/dialog/:userId/list", dialogList)
+	router.GET("/post/feed/posted", handleWs)
+
 	router.Run(":3000")
+
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Panicf("%s: %s", msg, err)
+	}
+}
+
+func handleWs(c *gin.Context) {
+	connWS, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to upgrade connection: %v", err)
+		return
+	}
+	defer connWS.Close()
+
+	_, message, err := connWS.ReadMessage()
+	if err != nil {
+		log.Printf("Error %s when reading message from client", err)
+		return
+	}
+	user := strings.Trim(string(message), " ")
+
+	log.Println("start responding to client...")
+	i := 1
+	for {
+		conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq:5672/")
+		failOnError(err, "Failed to connect to RabbitMQ")
+		defer conn.Close()
+
+		ch, err := conn.Channel()
+		failOnError(err, "Failed to open a channel")
+		defer ch.Close()
+
+		q, err := ch.QueueDeclare(
+			user,  // name
+			false, // durable
+			false, // delete when unused
+			false, // exclusive
+			false, // no-wait
+			nil,   // arguments
+		)
+		failOnError(err, "Failed to declare a queue")
+
+		msgs, err := ch.Consume(
+			q.Name, // queue
+			"",     // consumer
+			true,   // auto-ack
+			false,  // exclusive
+			false,  // no-local
+			false,  // no-wait
+			nil,    // args
+		)
+		for d := range msgs {
+			response := fmt.Sprintf("Received a message: %s", d.Body)
+			err = connWS.WriteMessage(websocket.TextMessage, []byte(response))
+
+			if err != nil {
+				log.Printf("Error %s when sending message to client", err)
+				return
+			}
+		}
+
+		i = i + 1
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func dialogSend(c *gin.Context) {
@@ -275,20 +353,56 @@ func postCreate(c *gin.Context) {
 		return
 	}
 
-	stmt, err := db.Prepare("INSERT INTO posts(post) VALUES ($1) RETURNING post_id")
+	stmt, err := db.Prepare("INSERT INTO posts(user_id, post) VALUES ($1, $2) RETURNING post_id")
 	if err != nil {
 		log.Panic(err)
 		return
 	}
 	defer stmt.Close()
 
-	err = stmt.QueryRow(newPost.Post).Scan(&postId)
+	err = stmt.QueryRow(newPost.User_id, newPost.Post).Scan(&postId)
 	if err != nil {
 		log.Panic(err)
 		return
 	}
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"Post created": postId})
+	conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq:5672/") // Создаем подключение к RabbitMQ
+	if err != nil {
+		log.Fatalf("unable to open connect to RabbitMQ server. Error: %s", err)
+	}
+
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	failOnError(err, "Failed to open a channel")
+	defer ch.Close()
+
+	q, err := ch.QueueDeclare(
+		newPost.User_id, // name
+		false,           // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		nil,             // arguments
+	)
+	failOnError(err, "Failed to declare a queue")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	body := newPost.Post
+	err = ch.PublishWithContext(ctx,
+		"",     // exchange
+		q.Name, // routing key
+		false,  // mandatory
+		false,  // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        []byte(body),
+		})
+	failOnError(err, "Failed to publish a message")
+	log.Printf(" [x] Sent %s\n", body)
 }
 
 func loginUser(c *gin.Context) {

@@ -4,12 +4,10 @@
 Коллекция вызовов для Postman лежит в папке `Postman`.
 
 1. Запускаем базу данных и API командой `docker-compose up -d`.
-2. Ждем когда Citus запустится, перезагрузится, создадутся таблицы.
+2. Ждем когда контейнеры запустятся
 3. Запускаем otus_hl_master `docker container start otus_hl_master`
-4. Делаем таблицу dialogs шардированной  для чего заходим в консоль контейнера коррдинатора `docker exec -it otus_hl_master psql -U user`. В консоли `SELECT create_distributed_table('dialogs', 'dialog_id');` 
-5. Проверяем запущенные ноды `SELECT master_get_active_worker_nodes();`. Если есть otus_hl_worker1, otus_hl_worker2 - всё хорошо, иначе `docker-compose down` и заново запускаем пункт 1 и далее
-6. Открываем Postman, создаем новый пост. Запрос `DialogSend` localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/send
-7. Создаём запрос в Postman `DialogList`c userID из пункта 6. localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb9c/list. Получаем ответ c диалогами
+4. Открываем Postman, создаем новый пост. Запрос `PostCreate` localhost:8080/post/create c id пользователя 550e8400-e29b-41d4-a716-446655440000. Данный запрос отправляет сообщение в очередь RabbitMQ с routingkey = id пользователя.
+5. Открываем в Postman New->WebSocket, указываем путь `localhost:8080/post/feed/posted` и жмём `Connect`
+6. В окне WebSocket тправляем Message с id пользователя `550e8400-e29b-41d4-a716-446655440000` кнопкой `Send`. В ответ получаем посты этого пользователя из соответсвующей очереди, заполненной в пункте 4.  
 
-8. Для ребалансировки без остановки можно применить SELECT citus_rebalance_start(); 
-Starting in version 11.0, Citus Community edition now supports non-blocking reads and writes during rebalancing.
+7. Для масштабирования RabbitMQ можно применить балансировщик нагрузки по нескольким серверам.

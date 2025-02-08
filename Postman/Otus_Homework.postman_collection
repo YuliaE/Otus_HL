@@ -153,7 +153,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"posttext\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\"\r\n}",
+					"raw": "{\r\n       \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\r\n       \"posttext\": \"new posta\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
@@ -161,13 +161,14 @@
 					}
 				},
 				"url": {
-					"raw": "localhost:3000/post/create",
+					"raw": "localhost:3000/post/ed40b849-fd72-4601-afdb-00d1031beb9c/create",
 					"host": [
 						"localhost"
 					],
 					"port": "3000",
 					"path": [
 						"post",
+						"ed40b849-fd72-4601-afdb-00d1031beb9c",
 						"create"
 					]
 				}
