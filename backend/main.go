@@ -128,7 +128,9 @@ func handleWs(c *gin.Context) {
 	log.Println("start responding to client...")
 	i := 1
 	for {
-		conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq:5672/")
+		amqpServerURL := os.Getenv("AMQP_SERVER_URL")
+		//.conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq1:5672/")
+		conn, err := amqp.Dial(amqpServerURL)
 		failOnError(err, "Failed to connect to RabbitMQ")
 		defer conn.Close()
 
@@ -367,7 +369,12 @@ func postCreate(c *gin.Context) {
 	}
 
 	c.IndentedJSON(http.StatusCreated, gin.H{"Post created": postId})
-	conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq:5672/") // Создаем подключение к RabbitMQ
+
+	amqpServerURL := os.Getenv("AMQP_SERVER_URL")
+	//.conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq1:5672/")
+	conn, err := amqp.Dial(amqpServerURL)
+
+	//conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq1:5672/") // Создаем подключение к RabbitMQ
 	if err != nil {
 		log.Fatalf("unable to open connect to RabbitMQ server. Error: %s", err)
 	}
