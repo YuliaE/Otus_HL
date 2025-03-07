@@ -5,9 +5,7 @@
 
 1. Запускаем базу данных и API командой `docker-compose up -d`.
 2. Ждем когда контейнеры запустятся
-3. Запускаем otus_hl_master `docker container start otus_hl_master`
-4. Открываем Postman, создаем новый пост. Запрос `PostCreate` localhost:8080/post/create c id пользователя 550e8400-e29b-41d4-a716-446655440000. Данный запрос отправляет сообщение в очередь RabbitMQ с routingkey = id пользователя.
-5. Открываем в Postman New->WebSocket, указываем путь `localhost:8080/post/feed/posted` и жмём `Connect`
-6. В окне WebSocket тправляем Message с id пользователя `550e8400-e29b-41d4-a716-446655440000` кнопкой `Send`. В ответ получаем посты этого пользователя из соответсвующей очереди, заполненной в пункте 4.  
+3. Открываем Postman, создаем новый диалог. Запрос `DialogSend` по адресу `localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/send` c id пользователя 550e8400-e29b-41d4-a716-446655440000. Данный запрос сохраняет диалог в Redis.
+4. Открываем в Postman `DialogList` по адресу `localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/list` и жмём `Send`. В ответ получим 10 последних диалогов
 
-7. Для масштабирования RabbitMQ можно применить балансировщик нагрузки по нескольким серверам.
+

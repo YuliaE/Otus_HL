@@ -13,6 +13,12 @@ services:
       DB_USER: "user"
       DB_PASSWORD: "user"
       DB_NAME: "otus_db"
+      # REDIS_HOST: "redis:6379"
+      # REDIS_PASSWORD : "user"
+      # REDIS_USER : "user"
+      # #REDIS_PORT: 6379
+      # REDIS_DB: 0
+      REDIS_STR: "redis://user:user@redis:6379/0"
       AMQP_SERVER_URL: "amqp://rmuser:rmpassword@haproxy:5672/"
     build:
       context: backend
@@ -100,6 +106,23 @@ services:
       - ./Postgres:/docker-entrypoint-initdb.d # Инициализация таблиц
       - pgdata:/var/lib/postgresql/data # Папка, где postgres будет хранить данные
       - ./volumes/Database/backups:/backups # Папка для бекапов
+    networks:
+      - otus_net
+
+  redis:
+    image: redis:8.0-M03
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+     # - /path/to/local/dаta:/root/redis
+      - ./lua/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+   #   - REDIS_PASSWORD=user
+   #   - REDIS_USER=user
+      - REDIS_PORT=6379
+      - REDIS_DATABASES=0
     networks:
       - otus_net
 

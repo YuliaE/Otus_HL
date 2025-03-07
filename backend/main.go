@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,8 +44,8 @@ type newPost struct {
 }
 
 type newDialog struct {
-	User_to     string `json:"userto"`
-	Dialog_Text string `json:"dialogtext"`
+	Receiver string `json:"userto"`
+	Message  string `json:"dialogtext"`
 }
 
 type getUser struct {
@@ -81,6 +82,13 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+type Dialog struct {
+	Sender    string
+	Receiver  string
+	Message   string
+	Timestamp time.Time
 }
 
 func main() {
@@ -172,58 +180,143 @@ func handleWs(c *gin.Context) {
 	}
 }
 
+// FindDialogsByUserLuaPaginated ищет диалоги по пользователю с пагинацией
+func FindDialogsByUserLuaPaginated(client *redis.Client, username string, cursor uint64, limit int) ([]Dialog, error) {
+	ctx := context.Background()
+
+	// Lua-скрипт для постраничного поиска диалогов
+	script := `
+		local username = ARGV[1]
+		local cursor = tonumber(ARGV[2])
+		local limit = tonumber(ARGV[3])
+		local pattern = "dialog:*" .. username .. "*"
+		local result = {}
+		local count = 0
+
+		repeat
+			local scan_result = redis.call('SCAN', cursor, 'MATCH', pattern, 'COUNT', 100)
+			cursor = tonumber(scan_result[1])
+			local keys = scan_result[2]
+
+			for i, key in ipairs(keys) do
+				if count >= limit then
+					break
+				end
+
+				local dialog = redis.call('HGETALL', key)
+				table.insert(result, dialog)
+				count = count + 1
+			end
+		until cursor == 0 or count >= limit
+
+		return {cursor, result}
+	`
+
+	// Выполняем Lua-скрипт
+	res, err := client.Eval(ctx, script, []string{}, username, cursor, limit).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	// Преобразуем результат
+	if result, ok := res.([]interface{}); ok && len(result) == 2 {
+		//newCursor := uint64(result[0].(int64))
+		dialogsData := result[1].([]interface{})
+
+		var dialogs []Dialog
+		for _, item := range dialogsData {
+			if dialogData, ok := item.([]interface{}); ok {
+				dialog := Dialog{}
+				for i := 0; i < len(dialogData); i += 2 {
+					key := dialogData[i].(string)
+					value := dialogData[i+1].(string)
+
+					switch key {
+					case "sender":
+						dialog.Sender = value
+					case "receiver":
+						dialog.Receiver = value
+					case "message":
+						dialog.Message = value
+					case "timestamp":
+						timestamp, err := time.Parse(time.RFC3339, value)
+						if err != nil {
+							return nil, err
+						}
+						dialog.Timestamp = timestamp
+					}
+				}
+				dialogs = append(dialogs, dialog)
+			}
+		}
+
+		return dialogs, nil
+	}
+
+	return nil, fmt.Errorf("неверный формат результата")
+}
+
 func dialogSend(c *gin.Context) {
 
-	var newDialog newDialog
-	var dialogId int
+	var dialog Dialog
 
 	userFrom := c.Param("userId")
 
-	db := db.InitDB()
-	defer db.Close()
-	if err := c.BindJSON(&newDialog); err != nil {
+	if err := c.BindJSON(&dialog); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
 
-	stmt, err := db.Prepare("INSERT INTO dialogs(dialog_text, user_to, user_from) VALUES ($1, $2, $3) RETURNING dialog_id")
+	client := redis.NewClient(&redis.Options{
+		Addr:     "redis:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	ctx := context.Background()
+
+	dialogTime := time.Now()
+
+	key := fmt.Sprintf("dialog:%s:%s:%d", dialog.Sender, userFrom, dialogTime)
+
+	err := client.HSet(ctx, key, map[string]interface{}{
+		"sender":    dialog.Sender,
+		"receiver":  userFrom,
+		"message":   dialog.Message,
+		"timestamp": dialogTime,
+	}).Err()
 	if err != nil {
 		log.Panic(err)
-		return
-	}
-	defer stmt.Close()
-
-	err = stmt.QueryRow(newDialog.Dialog_Text, newDialog.User_to, userFrom).Scan(&dialogId)
-	if err != nil {
-		log.Panic(err)
-		return
 	}
 
-	c.IndentedJSON(http.StatusCreated, gin.H{"Dialog created": dialogId})
+	c.IndentedJSON(http.StatusCreated, gin.H{"Dialog created at": dialogTime})
 }
 
 func dialogList(c *gin.Context) {
 
 	userId := c.Param("userId")
-	db := db.InitDB()
-	defer db.Close()
 
-	rows, err := db.Query("SELECT dialog_id, user_from, user_to, dialog_text FROM dialogs WHERE user_to = $1 OR user_from = $1 ORDER BY dialog_id DESC", userId)
+	client := redis.NewClient(&redis.Options{
+		Addr:     "redis:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	ctx := context.Background()
+
+	pong, err := client.Ping(ctx).Result()
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("Ошибка подключения к Redis: %v", err)
+	}
+	fmt.Println("Подключение к Redis успешно:", pong)
+	cursor := uint64(0) // Начальный курсор
+	limit := 10         // Лимит на количество диалогов
+
+	dialogResult, err := FindDialogsByUserLuaPaginated(client, userId, cursor, limit)
+	if err != nil {
+		log.Fatalf("Ошибка при поиске диалогов: %v", err)
 	}
 
-	defer rows.Close()
-
-	var dialogResult []getDialog
-	for rows.Next() {
-		var a getDialog
-		err := rows.Scan(&a.Dialog_id, &a.User_from, &a.User_to, &a.Dialog_text)
-		if err != nil {
-			log.Panic(err)
-		}
-		dialogResult = append(dialogResult, a)
-	}
 	c.IndentedJSON(http.StatusOK, dialogResult)
 }
 
@@ -371,10 +464,8 @@ func postCreate(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, gin.H{"Post created": postId})
 
 	amqpServerURL := os.Getenv("AMQP_SERVER_URL")
-	//.conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq1:5672/")
 	conn, err := amqp.Dial(amqpServerURL)
 
-	//conn, err := amqp.Dial("amqp://rmuser:rmpassword@rabbitmq1:5672/") // Создаем подключение к RabbitMQ
 	if err != nil {
 		log.Fatalf("unable to open connect to RabbitMQ server. Error: %s", err)
 	}

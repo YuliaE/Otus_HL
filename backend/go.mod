@@ -12,6 +12,18 @@ require github.com/google/uuid v1.6.0
 require github.com/dgrijalva/jwt-go v3.2.0+incompatible
 
 require (
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/redis/go-redis/v9 v9.7.1 // indirect
+	github.com/tarantool/go-iproto v1.1.0 // indirect
+	github.com/tinylib/msgp v1.0.3-0.20180215042507-3b5c87ab5fb0 // indirect
+	github.com/viciious/go-tarantool v1.1.7 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
+)
+
+require (
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
@@ -33,6 +45,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0
+	github.com/tarantool/go-tarantool/v2 v2.2.1
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.8.0 // indirect
