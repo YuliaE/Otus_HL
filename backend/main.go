@@ -180,47 +180,19 @@ func handleWs(c *gin.Context) {
 	}
 }
 
-// FindDialogsByUserLuaPaginated ищет диалоги по пользователю с пагинацией
-func FindDialogsByUserLuaPaginated(client *redis.Client, username string, cursor uint64, limit int) ([]Dialog, error) {
+// FindDialogsByUserRedisFunction ищет диалоги по пользователю с пагинацией
+func FindDialogsByUserRedisFunction(client *redis.Client, username string, cursor uint64, limit int) (uint64, []Dialog, error) {
 	ctx := context.Background()
 
-	// Lua-скрипт для постраничного поиска диалогов
-	script := `
-		local username = ARGV[1]
-		local cursor = tonumber(ARGV[2])
-		local limit = tonumber(ARGV[3])
-		local pattern = "dialog:*" .. username .. "*"
-		local result = {}
-		local count = 0
-
-		repeat
-			local scan_result = redis.call('SCAN', cursor, 'MATCH', pattern, 'COUNT', 100)
-			cursor = tonumber(scan_result[1])
-			local keys = scan_result[2]
-
-			for i, key in ipairs(keys) do
-				if count >= limit then
-					break
-				end
-
-				local dialog = redis.call('HGETALL', key)
-				table.insert(result, dialog)
-				count = count + 1
-			end
-		until cursor == 0 or count >= limit
-
-		return {cursor, result}
-	`
-
-	// Выполняем Lua-скрипт
-	res, err := client.Eval(ctx, script, []string{}, username, cursor, limit).Result()
+	// Вызываем загруженную функцию с помощью FCALL
+	res, err := client.FCall(ctx, "find_dialogs", []string{username}, cursor, limit).Result()
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
 	// Преобразуем результат
 	if result, ok := res.([]interface{}); ok && len(result) == 2 {
-		//newCursor := uint64(result[0].(int64))
+		newCursor := uint64(result[0].(int64))
 		dialogsData := result[1].([]interface{})
 
 		var dialogs []Dialog
@@ -241,7 +213,7 @@ func FindDialogsByUserLuaPaginated(client *redis.Client, username string, cursor
 					case "timestamp":
 						timestamp, err := time.Parse(time.RFC3339, value)
 						if err != nil {
-							return nil, err
+							return 0, nil, err
 						}
 						dialog.Timestamp = timestamp
 					}
@@ -250,10 +222,10 @@ func FindDialogsByUserLuaPaginated(client *redis.Client, username string, cursor
 			}
 		}
 
-		return dialogs, nil
+		return newCursor, dialogs, nil
 	}
 
-	return nil, fmt.Errorf("неверный формат результата")
+	return 0, nil, fmt.Errorf("неверный формат результата")
 }
 
 func dialogSend(c *gin.Context) {
@@ -295,7 +267,6 @@ func dialogSend(c *gin.Context) {
 func dialogList(c *gin.Context) {
 
 	userId := c.Param("userId")
-
 	client := redis.NewClient(&redis.Options{
 		Addr:     "redis:6379",
 		Password: "",
@@ -312,12 +283,21 @@ func dialogList(c *gin.Context) {
 	cursor := uint64(0) // Начальный курсор
 	limit := 10         // Лимит на количество диалогов
 
-	dialogResult, err := FindDialogsByUserLuaPaginated(client, userId, cursor, limit)
-	if err != nil {
-		log.Fatalf("Ошибка при поиске диалогов: %v", err)
+	for {
+		newCursor, dialogResult, err := FindDialogsByUserRedisFunction(client, userId, cursor, limit)
+		if err != nil {
+			log.Fatalf("Ошибка при поиске диалогов: %v", err)
+		}
+		// Если курсор равен 0, завершаем пагинацию
+		if newCursor == 0 {
+			c.IndentedJSON(http.StatusOK, dialogResult)
+			break
+		}
+
+		// Обновляем курсор для следующей итерации
+		cursor = newCursor
 	}
 
-	c.IndentedJSON(http.StatusOK, dialogResult)
 }
 
 func postFeed(c *gin.Context) {
