@@ -8,6 +8,7 @@
 3. Запускаем консоль контейнера Redis `docker exec -it redis bash`
 4. В консоли запускаем команду `cat /usr/local/etc/find_dialogs.lua | redis-cli -x FUNCTION LOAD`
 В ответе должно быть "dialogs". Если нет "dialogs", то повторить команду 
-5. Открываем Postman, создаем новый диалог. Запрос `DialogSend` по адресу `localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/send` c id пользователя 550e8400-e29b-41d4-a716-446655440000. Данный запрос сохраняет диалог в Redis.
-6. Открываем в Postman `DialogList` по адресу `localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/list` и жмём `Send`. В ответ получим 10 последних диалогов
-
+5. Открываем Postman, создаем новый диалог. Запрос `DialogSend` по адресу `localhost:8080/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/send` c id пользователя ed40b849-fd72-4601-afdb-00d1031beb9d. Данный запрос отправляет диалог в новый отдельный сервис диалогов.
+6. Создаём запрос `DialogSend` по адресу `localhost:8080/dialogs/dialognew/send` c id пользователя 4996ec31-bbe3-4e21-af1f-106b5d401a7a. Данный запрос сохранит диалог сразу в новоми сервисе. Контракт отличается от п.5 переездом параметра userfrom в тело сообщения, в старом монолите был параметром в строке запроса.
+7. Открываем в Postman `DialogList` по адресу `localhost:8080/dialogs/dialognew/ed40b849-fd72-4601-afdb-00d1031beb9d/list` и жмём `Send`. В ответ получим 10 последних диалогов от пользователя п.5, то есть отправленных через старый сервис. 
+8. Открываем в Postman `DialogList` по адресу `localhost:8080/dialogs/dialognew/4996ec31-bbe3-4e21-af1f-106b5d401a7a/list` и жмём `Send`. В ответ получим 10 последних диалогов от пользователя отправленных через новый сервис диалогов. 

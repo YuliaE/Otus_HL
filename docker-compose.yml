@@ -26,6 +26,25 @@ services:
     command: go run ./main.go -b 0.0.0.0
     networks:
       - otus_net
+  backenddialogs:
+   container_name: backenddialogs
+   environment:
+     DB_HOST: "pg"
+     DB_PORT: 5432
+     DB_USER: "user"
+     DB_PASSWORD: "user"
+     DB_NAME: "otus_db"
+     REDIS_STR: "redis://user:user@redis:6379/0"
+     AMQP_SERVER_URL: "amqp://rmuser:rmpassword@haproxy:5672/"
+   build:
+     context: backendDialogs
+   ports:
+     - 3001:3001
+   volumes:
+     - .:/usr/src/app
+   command: go run ./main.go -b 0.0.0.0
+   networks:
+     - otus_net
   rabbitmq1:
     image: rabbitmq:3.13.7-management
     hostname: rabbitmq1

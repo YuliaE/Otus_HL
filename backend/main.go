@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"db/db"
+	"encoding/json"
+	"io"
 	"strconv"
 	"strings"
 
@@ -19,7 +22,6 @@ import (
 	"github.com/gorilla/websocket"
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -65,12 +67,6 @@ type getUserSearch struct {
 	City        string `json:"city"`
 }
 
-type getDialog struct {
-	Dialog_id   string `json:"id"`
-	User_from   string `json:"userfrom"`
-	User_to     string `json:"userto"`
-	Dialog_text string `json:"text"`
-}
 type Post struct {
 	PostId int
 	Post   string
@@ -85,15 +81,47 @@ var upgrader = websocket.Upgrader{
 }
 
 type Dialog struct {
-	Sender    string
-	Receiver  string
-	Message   string
-	Timestamp time.Time
+	Sender   string `json:"userfrom"`
+	Receiver string `json:"userto"`
+	Message  string `json:"dialogtext"`
+}
+
+// DialogResponse представляет структуру ответа от API диалогов
+type DialogResponse struct {
+	DialogTime string `json:"dialogtime"`
 }
 
 func main() {
 
 	router := gin.Default()
+
+	// Middleware для логирования и установки X-Request-ID
+	router.Use(
+		// Установка X-Request-ID если не передан
+		func(c *gin.Context) {
+			requestID := c.GetHeader("X-Request-ID")
+			if requestID == "" {
+				requestID = uuid.New().String()
+				c.Header("X-Request-ID", requestID)
+			}
+			c.Next()
+		},
+		// Логирование всех входящих запросов
+		gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
+			return fmt.Sprintf("[%s] %s %s %d %s | X-Request-ID: %s | Body: %s\n",
+				param.TimeStamp.Format(time.RFC3339),
+				param.Method,
+				param.Path,
+				param.StatusCode,
+				param.Latency,
+				param.Request.Header.Get("X-Request-ID"),
+				getRequestBody(param.Request),
+			)
+		}),
+		// Recovery middleware на случай паники
+		gin.Recovery(),
+	)
+
 	users := router.Group("/users")
 	users.Use(authMiddleware())
 	{
@@ -105,7 +133,7 @@ func main() {
 	router.POST("/post/create", postCreate)
 	router.GET("/post/feed", postFeed)
 	router.POST("/dialog/:userId/send", dialogSend)
-	router.GET("/dialog/:userId/list", dialogList)
+	//router.GET("/dialog/:userId/list", dialogList)
 	router.GET("/post/feed/posted", handleWs)
 
 	router.Run(":3000")
@@ -116,6 +144,22 @@ func failOnError(err error, msg string) {
 	if err != nil {
 		log.Panicf("%s: %s", msg, err)
 	}
+}
+
+func getRequestBody(req *http.Request) string {
+	if req.Body == nil {
+		return ""
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return fmt.Sprintf("<error reading body: %v>", err)
+	}
+
+	// Восстанавливаем тело запроса для дальнейшего чтения
+	req.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	return string(body)
 }
 
 func handleWs(c *gin.Context) {
@@ -180,124 +224,89 @@ func handleWs(c *gin.Context) {
 	}
 }
 
-// FindDialogsByUserRedisFunction ищет диалоги по пользователю с пагинацией
-func FindDialogsByUserRedisFunction(client *redis.Client, username string, cursor uint64, limit int) (uint64, []Dialog, error) {
-	ctx := context.Background()
-
-	// Вызываем загруженную функцию с помощью FCALL
-	res, err := client.FCall(ctx, "find_dialogs", []string{username}, cursor, limit).Result()
+// callDialogAPI вызывает API диалогов с заданными параметрами
+func callDialogAPI(request Dialog, requestID string) (*DialogResponse, error) {
+	// URL API диалогов (замените на реальный URL)
+	apiURL := "http://backenddialogs:3001/dialognew/send"
+	// Преобразуем запрос в JSON
+	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return 0, nil, err
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+	fmt.Printf("[OUTGOING] [%s] %s %s | Body: %s\n",
+		time.Now().Format(time.RFC3339),
+		"POST",
+		apiURL,
+		string(requestBody),
+	)
+	// Создаем HTTP-клиент с таймаутом
+	client := &http.Client{
+		Timeout: time.Second * 10,
 	}
 
-	// Преобразуем результат
-	if result, ok := res.([]interface{}); ok && len(result) == 2 {
-		newCursor := uint64(result[0].(int64))
-		dialogsData := result[1].([]interface{})
-
-		var dialogs []Dialog
-		for _, item := range dialogsData {
-			if dialogData, ok := item.([]interface{}); ok {
-				dialog := Dialog{}
-				for i := 0; i < len(dialogData); i += 2 {
-					key := dialogData[i].(string)
-					value := dialogData[i+1].(string)
-
-					switch key {
-					case "sender":
-						dialog.Sender = value
-					case "receiver":
-						dialog.Receiver = value
-					case "message":
-						dialog.Message = value
-					case "timestamp":
-						timestamp, err := time.Parse(time.RFC3339, value)
-						if err != nil {
-							return 0, nil, err
-						}
-						dialog.Timestamp = timestamp
-					}
-				}
-				dialogs = append(dialogs, dialog)
-			}
-		}
-
-		return newCursor, dialogs, nil
+	// Создаем HTTP-запрос
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	return 0, nil, fmt.Errorf("неверный формат результата")
+	// Устанавливаем заголовки
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", requestID)
+	// Если нужно, добавьте аутентификацию
+	// req.Header.Set("Authorization", "Bearer your-token")
+
+	// Выполняем запрос
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call dialog API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Читаем ответ
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	//Парсим ответ
+	var dialogResp DialogResponse
+	if err := json.Unmarshal(body, &dialogResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	return &dialogResp, nil
+	//return body, nil
 }
 
 func dialogSend(c *gin.Context) {
 
-	var dialog Dialog
+	var req Dialog
+	var oldreq newDialog
 
-	userFrom := c.Param("userId")
+	//userFrom := c.Param("userId")
+	requestID := c.GetHeader("X-Request-ID")
+	if requestID == "" {
+		requestID = uuid.New().String()
+		c.Header("X-Request-ID", requestID)
+	}
 
-	if err := c.BindJSON(&dialog); err != nil {
+	if err := c.BindJSON(&oldreq); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		return
 	}
+	req.Sender = c.Param("userId")
+	req.Receiver = oldreq.Receiver
+	req.Message = oldreq.Message
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	ctx := context.Background()
-
-	dialogTime := time.Now()
-
-	key := fmt.Sprintf("dialog:%s:%s:%d", dialog.Sender, userFrom, dialogTime)
-
-	err := client.HSet(ctx, key, map[string]interface{}{
-		"sender":    dialog.Sender,
-		"receiver":  userFrom,
-		"message":   dialog.Message,
-		"timestamp": dialogTime,
-	}).Err()
+	// Вызов API диалогов
+	response, err := callDialogAPI(req, requestID)
 	if err != nil {
-		log.Panic(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	c.IndentedJSON(http.StatusCreated, gin.H{"Dialog created at": dialogTime})
-}
-
-func dialogList(c *gin.Context) {
-
-	userId := c.Param("userId")
-	client := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	ctx := context.Background()
-
-	pong, err := client.Ping(ctx).Result()
-	if err != nil {
-		log.Fatalf("Ошибка подключения к Redis: %v", err)
-	}
-	fmt.Println("Подключение к Redis успешно:", pong)
-	cursor := uint64(0) // Начальный курсор
-	limit := 10         // Лимит на количество диалогов
-
-	for {
-		newCursor, dialogResult, err := FindDialogsByUserRedisFunction(client, userId, cursor, limit)
-		if err != nil {
-			log.Fatalf("Ошибка при поиске диалогов: %v", err)
-		}
-		// Если курсор равен 0, завершаем пагинацию
-		if newCursor == 0 {
-			c.IndentedJSON(http.StatusOK, dialogResult)
-			break
-		}
-
-		// Обновляем курсор для следующей итерации
-		cursor = newCursor
-	}
-
+	c.IndentedJSON(http.StatusCreated, gin.H{"result": response})
 }
 
 func postFeed(c *gin.Context) {

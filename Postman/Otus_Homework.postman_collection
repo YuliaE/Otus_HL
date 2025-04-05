@@ -182,6 +182,35 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
+					"raw": "{\r\n    \"userto\": \"550e8400-e29b-41d4-a716-446655440000\",\r\n    \"dialogtext\": \"taran-bbавпвпавпe3ytreytyytdfg\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:3000/dialog/ed40b849-fd72-4601-afdb-00d1031beb8c/send",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"dialog",
+						"ed40b849-fd72-4601-afdb-00d1031beb8c",
+						"send"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "DialogNewSend",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
 					"raw": "{\r\n    \"userto\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\",\r\n    \"dialogtext\": \"4996ec31-bbe3-4e21-af1f-106b5d401a7a\"\r\n}",
 					"options": {
 						"raw": {
@@ -230,7 +259,7 @@
 			"response": []
 		},
 		{
-			"name": "DialogList",
+			"name": "DialogNewList",
 			"request": {
 				"method": "GET",
 				"header": [],
